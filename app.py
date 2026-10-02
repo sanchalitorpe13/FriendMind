@@ -3,6 +3,7 @@ import ollama
 from pypdf import PdfReader
 
 from src.rag import add_document, search_documents
+from src.quiz import generate_quiz
 
 
 # -----------------------------------
@@ -323,3 +324,151 @@ st.divider()
 st.caption(
     "Powered by Gemma 3 4B • Ollama • ChromaDB • Streamlit"
 )
+
+# ---------------- QUIZ GENERATOR ----------------
+
+st.divider()
+
+st.header("📝 Quiz Generator")
+
+st.write(
+    "Test your understanding using questions generated from your uploaded study material."
+)
+
+if "quiz" not in st.session_state:
+    st.session_state.quiz = None
+
+if "quiz_answers" not in st.session_state:
+    st.session_state.quiz_answers = {}
+
+if st.session_state.get("processed_file"):
+    col1, col2 = st.columns(2)
+
+    with col1:
+        num_questions = st.selectbox(
+            "Number of questions",
+            [5, 10],
+            index=0
+        )
+
+    with col2:
+        difficulty = st.selectbox(
+            "Difficulty",
+            ["Easy", "Medium", "Hard"],
+            index=1
+        )
+
+    if st.button("🧠 Generate Quiz", use_container_width=True):
+
+        with st.spinner("FriendMind is creating your quiz..."):
+
+            results = search_documents(
+                "important concepts definitions key topics",
+                top_k=5
+            )
+
+            documents = results.get("documents", [[]])[0]
+
+            context = "\n\n".join(documents)
+
+            quiz = generate_quiz(
+                context=context,
+                num_questions=num_questions,
+                difficulty=difficulty
+            )
+
+            st.session_state.quiz = quiz
+            st.session_state.quiz_answers = {}
+
+else:
+    st.info("📚 Upload and process a study PDF first.")
+
+# ---------------- DISPLAY QUIZ ----------------
+
+if st.session_state.quiz:
+
+    quiz = st.session_state.quiz
+
+    if "error" in quiz:
+        st.error(quiz["error"])
+
+    else:
+
+        questions = quiz.get("questions", [])
+
+        st.subheader("📖 Your Quiz")
+
+        for i, question in enumerate(questions):
+
+            st.markdown(
+                f"### Question {i + 1}"
+            )
+
+            st.write(question["question"])
+
+            answer = st.radio(
+                "Choose your answer:",
+                question["options"],
+                key=f"quiz_question_{i}"
+            )
+
+            st.session_state.quiz_answers[i] = answer
+
+            st.divider()
+
+        if st.button(
+            "✅ Submit Quiz",
+            use_container_width=True
+        ):
+
+            score = 0
+
+            for i, question in enumerate(questions):
+
+                selected_answer = st.session_state.quiz_answers.get(i)
+
+                correct_index = question["answer"]
+
+                correct_answer = question["options"][correct_index]
+
+                if selected_answer == correct_answer:
+                    score += 1
+
+            percentage = int(
+                (score / len(questions)) * 100
+            ) if questions else 0
+
+            st.success(
+                f"🎉 You scored {score}/{len(questions)} "
+                f"({percentage}%)"
+            )
+
+            st.subheader("📚 Answer Review")
+
+            for i, question in enumerate(questions):
+
+                selected_answer = st.session_state.quiz_answers.get(i)
+
+                correct_answer = question["options"][
+                    question["answer"]
+                ]
+
+                if selected_answer == correct_answer:
+
+                    st.success(
+                        f"Question {i + 1}: Correct ✅"
+                    )
+
+                else:
+
+                    st.error(
+                        f"Question {i + 1}: Incorrect ❌"
+                    )
+
+                    st.write(
+                        f"Correct answer: **{correct_answer}**"
+                    )
+
+                st.caption(
+                    f"Explanation: {question['explanation']}"
+                )
