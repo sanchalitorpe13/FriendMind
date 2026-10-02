@@ -18,6 +18,69 @@ st.set_page_config(
 
 
 # -----------------------------------
+# Weak Topic Detection
+# -----------------------------------
+
+def detect_weak_topics(incorrect_questions):
+
+    if not incorrect_questions:
+        return "🎉 Great job! You did not get any questions wrong."
+
+    question_text = "\n\n".join(
+        [
+            f"Question: {item['question']}\n"
+            f"Correct Answer: {item['correct_answer']}\n"
+            f"Student Answer: {item['student_answer']}"
+            for item in incorrect_questions
+        ]
+    )
+
+    prompt = f"""
+You are FriendMind, a personal AI study companion.
+
+Analyze the questions the student answered incorrectly.
+
+Identify the concepts or topics that appear to be weak based ONLY
+on the questions and answers provided below.
+
+Incorrect questions:
+----------------
+{question_text}
+----------------
+
+Give a concise response in this format:
+
+### ⚠️ Weak Topics
+
+- Topic 1 — brief reason
+- Topic 2 — brief reason
+
+### 📚 What to Revise
+
+Give 2-4 specific concepts the student should revise.
+
+### 🎯 Practice Recommendation
+
+Give one short recommendation for what the student should practice next.
+
+Do not invent topics that cannot reasonably be identified from
+the questions provided.
+"""
+
+    response = ollama.chat(
+        model="gemma3:4b",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+    )
+
+    return response["message"]["content"]
+
+
+# -----------------------------------
 # Gemma
 # -----------------------------------
 
@@ -111,7 +174,6 @@ if uploaded_file is not None:
             if text:
                 extracted_text += text + "\n"
 
-
         if extracted_text.strip():
 
             st.success(
@@ -123,7 +185,6 @@ if uploaded_file is not None:
                 f"Extracted approximately "
                 f"{len(extracted_text):,} characters."
             )
-
 
             # -----------------------------------
             # Add document to ChromaDB
@@ -152,7 +213,6 @@ if uploaded_file is not None:
                     chunk_count
                 )
 
-
             if "chunk_count" in st.session_state:
 
                 st.success(
@@ -160,7 +220,6 @@ if uploaded_file is not None:
                     f"{st.session_state['chunk_count']} "
                     f"chunk(s) indexed."
                 )
-
 
             # -----------------------------------
             # Preview
@@ -177,14 +236,12 @@ if uploaded_file is not None:
                     label_visibility="collapsed",
                 )
 
-
         else:
 
             st.warning(
                 "No readable text was found in this PDF. "
                 "It may contain scanned images."
             )
-
 
     except Exception as e:
 
@@ -253,7 +310,6 @@ if st.button(
                     [[]],
                 )[0]
 
-
                 if not documents:
 
                     st.warning(
@@ -267,7 +323,6 @@ if st.button(
                         documents
                     )
 
-
                     with st.spinner(
                         "FriendMind is thinking..."
                     ):
@@ -277,13 +332,11 @@ if st.button(
                             context,
                         )
 
-
                     st.markdown(
                         "### 📚 FriendMind's Answer"
                     )
 
                     st.markdown(answer)
-
 
                     # -----------------------------------
                     # Retrieved sources
@@ -304,7 +357,6 @@ if st.button(
 
                             st.write(document)
 
-
             except Exception as e:
 
                 st.error(
@@ -316,6 +368,368 @@ if st.button(
 
 
 # -----------------------------------
+# Quiz Generator
+# -----------------------------------
+
+st.divider()
+
+st.header("📝 Quiz Generator")
+
+st.write(
+    "Test your understanding using questions generated "
+    "from your uploaded study material."
+)
+
+
+# -----------------------------------
+# Quiz session state
+# -----------------------------------
+
+if "quiz" not in st.session_state:
+    st.session_state.quiz = None
+
+if "quiz_answers" not in st.session_state:
+    st.session_state.quiz_answers = {}
+
+if "quiz_score" not in st.session_state:
+    st.session_state.quiz_score = None
+
+if "quiz_percentage" not in st.session_state:
+    st.session_state.quiz_percentage = None
+
+if "incorrect_questions" not in st.session_state:
+    st.session_state.incorrect_questions = []
+
+
+# -----------------------------------
+# Quiz settings
+# -----------------------------------
+
+if st.session_state.get("processed_file"):
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        num_questions = st.selectbox(
+            "Number of questions",
+            [5, 10],
+            index=0,
+        )
+
+    with col2:
+
+        difficulty = st.selectbox(
+            "Difficulty",
+            ["Easy", "Medium", "Hard"],
+            index=1,
+        )
+
+    # -----------------------------------
+    # Generate Quiz
+    # -----------------------------------
+
+    if st.button(
+        "🧠 Generate Quiz",
+        use_container_width=True,
+    ):
+
+        with st.spinner(
+            "FriendMind is creating your quiz..."
+        ):
+
+            try:
+
+                # Retrieve fewer chunks for faster generation
+                results = search_documents(
+                    "important concepts definitions key topics",
+                    top_k=3,
+                )
+
+                documents = results.get(
+                    "documents",
+                    [[]],
+                )[0]
+
+                if not documents:
+
+                    st.error(
+                        "No relevant study material was found "
+                        "for quiz generation."
+                    )
+
+                else:
+
+                    context = "\n\n".join(
+                        documents
+                    )
+
+                    quiz = generate_quiz(
+                        context=context,
+                        num_questions=num_questions,
+                        difficulty=difficulty,
+                    )
+
+                    st.session_state.quiz = quiz
+                    st.session_state.quiz_answers = {}
+
+                    # Clear previous results
+                    st.session_state.quiz_score = None
+                    st.session_state.quiz_percentage = None
+                    st.session_state.incorrect_questions = []
+
+            except Exception as e:
+
+                st.error(
+                    "Could not generate the quiz."
+                )
+
+                st.code(str(e))
+
+else:
+
+    st.info(
+        "📚 Upload and process a study PDF first."
+    )
+
+
+# -----------------------------------
+# Display Quiz
+# -----------------------------------
+
+if st.session_state.quiz:
+
+    quiz = st.session_state.quiz
+
+    if "error" in quiz:
+
+        st.error(
+            quiz["error"]
+        )
+
+        # Show raw response only when debugging is needed
+        if "raw_response" in quiz:
+
+            with st.expander(
+                "🔎 View Gemma response"
+            ):
+
+                st.code(
+                    quiz["raw_response"]
+                )
+
+    else:
+
+        questions = quiz.get(
+            "questions",
+            []
+        )
+
+        if questions:
+
+            st.subheader("📖 Your Quiz")
+
+            # -----------------------------------
+            # Display questions
+            # -----------------------------------
+
+            for i, quiz_question in enumerate(
+                questions
+            ):
+
+                st.markdown(
+                    f"### Question {i + 1}"
+                )
+
+                st.write(
+                    quiz_question["question"]
+                )
+
+                answer = st.radio(
+                    "Choose your answer:",
+                    quiz_question["options"],
+                    key=f"quiz_question_{i}",
+                )
+
+                st.session_state.quiz_answers[i] = answer
+
+                st.divider()
+
+            # -----------------------------------
+            # Submit Quiz
+            # -----------------------------------
+
+            if st.button(
+                "✅ Submit Quiz",
+                use_container_width=True,
+            ):
+
+                score = 0
+
+                incorrect_questions = []
+
+                # -----------------------------------
+                # Calculate score
+                # -----------------------------------
+
+                for i, quiz_question in enumerate(
+                    questions
+                ):
+
+                    selected_answer = (
+                        st.session_state.quiz_answers.get(i)
+                    )
+
+                    # IMPORTANT:
+                    # answer is now the actual answer text,
+                    # not an integer index.
+                    correct_answer = quiz_question["answer"]
+
+                    if selected_answer == correct_answer:
+
+                        score += 1
+
+                    else:
+
+                        incorrect_questions.append(
+                            {
+                                "question": quiz_question["question"],
+                                "correct_answer": correct_answer,
+                                "student_answer": (
+                                    selected_answer
+                                    if selected_answer
+                                    else "No answer selected"
+                                ),
+                            }
+                        )
+
+                # -----------------------------------
+                # Calculate percentage
+                # -----------------------------------
+
+                percentage = (
+                    int(
+                        (score / len(questions)) * 100
+                    )
+                    if questions
+                    else 0
+                )
+
+                # -----------------------------------
+                # Save result
+                # -----------------------------------
+
+                st.session_state.quiz_score = score
+
+                st.session_state.quiz_percentage = (
+                    percentage
+                )
+
+                st.session_state.incorrect_questions = (
+                    incorrect_questions
+                )
+
+                # -----------------------------------
+                # Show Score
+                # -----------------------------------
+
+                st.success(
+                    f"🎉 You scored {score}/{len(questions)} "
+                    f"({percentage}%)"
+                )
+
+                # -----------------------------------
+                # Answer Review
+                # -----------------------------------
+
+                st.subheader(
+                    "📚 Answer Review"
+                )
+
+                for i, quiz_question in enumerate(
+                    questions
+                ):
+
+                    selected_answer = (
+                        st.session_state.quiz_answers.get(i)
+                    )
+
+                    # IMPORTANT:
+                    # answer is actual text
+                    correct_answer = quiz_question["answer"]
+
+                    if selected_answer == correct_answer:
+
+                        st.success(
+                            f"Question {i + 1}: Correct ✅"
+                        )
+
+                    else:
+
+                        st.error(
+                            f"Question {i + 1}: Incorrect ❌"
+                        )
+
+                        st.write(
+                            f"Your answer: "
+                            f"**{selected_answer if selected_answer else 'No answer selected'}**"
+                        )
+
+                        st.write(
+                            f"Correct answer: "
+                            f"**{correct_answer}**"
+                        )
+
+                    st.caption(
+                        f"Explanation: "
+                        f"{quiz_question.get('explanation', 'No explanation available.')}"
+                    )
+
+                # -----------------------------------
+                # Weak Topic Detection
+                # -----------------------------------
+
+                st.divider()
+
+                st.subheader(
+                    "🎯 FriendMind's Learning Analysis"
+                )
+
+                if incorrect_questions:
+
+                    with st.spinner(
+                        "🧠 FriendMind is analyzing "
+                        "your mistakes..."
+                    ):
+
+                        weak_topics = detect_weak_topics(
+                            incorrect_questions
+                        )
+
+                    st.markdown(
+                        weak_topics
+                    )
+
+                else:
+
+                    st.success(
+                        "🌟 Excellent! You answered "
+                        "every question correctly."
+                    )
+
+                    st.info(
+                        "You can try a harder quiz "
+                        "to challenge yourself."
+                    )
+
+        else:
+
+            st.warning(
+                "No quiz questions were generated."
+            )
+
+
+# -----------------------------------
 # Footer
 # -----------------------------------
 
@@ -324,151 +738,3 @@ st.divider()
 st.caption(
     "Powered by Gemma 3 4B • Ollama • ChromaDB • Streamlit"
 )
-
-# ---------------- QUIZ GENERATOR ----------------
-
-st.divider()
-
-st.header("📝 Quiz Generator")
-
-st.write(
-    "Test your understanding using questions generated from your uploaded study material."
-)
-
-if "quiz" not in st.session_state:
-    st.session_state.quiz = None
-
-if "quiz_answers" not in st.session_state:
-    st.session_state.quiz_answers = {}
-
-if st.session_state.get("processed_file"):
-    col1, col2 = st.columns(2)
-
-    with col1:
-        num_questions = st.selectbox(
-            "Number of questions",
-            [5, 10],
-            index=0
-        )
-
-    with col2:
-        difficulty = st.selectbox(
-            "Difficulty",
-            ["Easy", "Medium", "Hard"],
-            index=1
-        )
-
-    if st.button("🧠 Generate Quiz", use_container_width=True):
-
-        with st.spinner("FriendMind is creating your quiz..."):
-
-            results = search_documents(
-                "important concepts definitions key topics",
-                top_k=5
-            )
-
-            documents = results.get("documents", [[]])[0]
-
-            context = "\n\n".join(documents)
-
-            quiz = generate_quiz(
-                context=context,
-                num_questions=num_questions,
-                difficulty=difficulty
-            )
-
-            st.session_state.quiz = quiz
-            st.session_state.quiz_answers = {}
-
-else:
-    st.info("📚 Upload and process a study PDF first.")
-
-# ---------------- DISPLAY QUIZ ----------------
-
-if st.session_state.quiz:
-
-    quiz = st.session_state.quiz
-
-    if "error" in quiz:
-        st.error(quiz["error"])
-
-    else:
-
-        questions = quiz.get("questions", [])
-
-        st.subheader("📖 Your Quiz")
-
-        for i, question in enumerate(questions):
-
-            st.markdown(
-                f"### Question {i + 1}"
-            )
-
-            st.write(question["question"])
-
-            answer = st.radio(
-                "Choose your answer:",
-                question["options"],
-                key=f"quiz_question_{i}"
-            )
-
-            st.session_state.quiz_answers[i] = answer
-
-            st.divider()
-
-        if st.button(
-            "✅ Submit Quiz",
-            use_container_width=True
-        ):
-
-            score = 0
-
-            for i, question in enumerate(questions):
-
-                selected_answer = st.session_state.quiz_answers.get(i)
-
-                correct_index = question["answer"]
-
-                correct_answer = question["options"][correct_index]
-
-                if selected_answer == correct_answer:
-                    score += 1
-
-            percentage = int(
-                (score / len(questions)) * 100
-            ) if questions else 0
-
-            st.success(
-                f"🎉 You scored {score}/{len(questions)} "
-                f"({percentage}%)"
-            )
-
-            st.subheader("📚 Answer Review")
-
-            for i, question in enumerate(questions):
-
-                selected_answer = st.session_state.quiz_answers.get(i)
-
-                correct_answer = question["options"][
-                    question["answer"]
-                ]
-
-                if selected_answer == correct_answer:
-
-                    st.success(
-                        f"Question {i + 1}: Correct ✅"
-                    )
-
-                else:
-
-                    st.error(
-                        f"Question {i + 1}: Incorrect ❌"
-                    )
-
-                    st.write(
-                        f"Correct answer: **{correct_answer}**"
-                    )
-
-                st.caption(
-                    f"Explanation: {question['explanation']}"
-                )
