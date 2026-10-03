@@ -52,16 +52,25 @@ def split_text(text, chunk_size=1000, overlap=200):
 # -----------------------------
 # Add document to vector DB
 # -----------------------------
-def add_document(text, document_name="study_material"):
 
+def add_document(text, document_name="study_material"):
     chunks = split_text(text)
 
     if not chunks:
         return 0
 
-    embeddings = embedding_model.encode(
-        chunks
-    ).tolist()
+    # Remove previously indexed chunks for the same document.
+    existing = collection.get(
+        where={"source": document_name},
+        include=["metadatas"]
+    )
+
+    existing_ids = existing.get("ids", []) or []
+
+    if existing_ids:
+        collection.delete(ids=existing_ids)
+
+    embeddings = embedding_model.encode(chunks).tolist()
 
     ids = [
         f"{document_name}_{i}"
@@ -75,15 +84,13 @@ def add_document(text, document_name="study_material"):
         metadatas=[
             {
                 "source": document_name,
-                "chunk": i,
+                "chunk": i
             }
             for i in range(len(chunks))
         ],
     )
 
     return len(chunks)
-
-
 # -----------------------------
 # Search documents
 # -----------------------------
@@ -99,3 +106,30 @@ def search_documents(query, top_k=3):
     )
 
     return results
+
+def get_indexed_documents():
+    """Return uploaded documents reconstructed from ChromaDB metadata."""
+    results = collection.get(include=["metadatas"])
+
+    metadatas = results.get("metadatas", []) or []
+
+    documents = {}
+
+    for metadata in metadatas:
+        if not metadata:
+            continue
+
+        source = metadata.get("source")
+
+        if not source:
+            continue
+
+        if source not in documents:
+            documents[source] = {
+                "name": source,
+                "chunks": 0
+            }
+
+        documents[source]["chunks"] += 1
+
+    return list(documents.values())

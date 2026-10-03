@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FriendMind — AI Study Companion</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+:root{--bg:#f7f8fc;--surface:#fff;--text:#101828;--muted:#667085;--border:#eaecf0;--primary:#6366f1;--primary-d:#4f46e5;--ink:#fff;--tint:#eef2ff;--tint-b:#e0e7ff;--ok-bg:#ecfdf3;--ok-b:#abefc6;--ok:#027a48;--warn-bg:#fff7ed;--warn-b:#fed7aa;--warn:#9a3412;--bad-bg:#fef3f2;--bad-b:#fecdca;--bad:#b42318;--shadow:0 2px 10px rgba(16,24,40,.05)}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1118;--surface:#171b26;--text:#f2f4f7;--muted:#98a2b3;--border:#272d3b;--primary:#818cf8;--primary-d:#a5b4fc;--ink:#0e1118;--tint:#1b2040;--tint-b:#2b3270;--ok-bg:#0f2a1d;--ok-b:#1c5a3b;--ok:#6ce9a6;--warn-bg:#2a1d10;--warn-b:#5c3a14;--warn:#fdba74;--bad-bg:#2d1513;--bad-b:#6b2420;--bad:#fda29b;--shadow:none}}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.25rem;letter-spacing:-.5px}
+.logo i{width:34px;height:34px;border-radius:10px;background:var(--primary);display:inline-flex;align-items:center;justify-content:center;font-style:normal}
+.links{display:flex;gap:26px;color:var(--muted);font-size:.92rem;font-weight:600;align-items:center}.links a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;cursor:pointer;font:inherit;font-weight:700;border-radius:10px;padding:11px 20px;min-height:44px;background:var(--primary);color:var(--ink);transition:background .15s}
+.btn:hover{background:var(--primary-d)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--border)}.btn.block{width:100%}
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:center;padding:52px 0 48px}
+.badge{display:inline-block;padding:6px 12px;border-radius:999px;background:var(--ok-bg);color:var(--ok);font-size:.82rem;font-weight:700}
+h1{font-size:clamp(2.2rem,5vw,3.5rem);line-height:1.08;letter-spacing:-1.6px;font-weight:800;margin:18px 0}
+.lead{color:var(--muted);font-size:1.08rem;max-width:560px;margin:0 0 26px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow)}
+.drop{display:block;border:2px dashed var(--tint-b);background:var(--tint);border-radius:14px;padding:34px 20px;text-align:center;cursor:pointer;transition:border-color .15s}
+.drop:hover,.drop.over{border-color:var(--primary)}.drop b{display:block;font-size:1.05rem}.drop span{color:var(--muted);font-size:.88rem}
+.drop input{display:none}
+.ready{display:none;gap:14px;align-items:center;background:var(--ok-bg);border:1px solid var(--ok-b);border-radius:14px;padding:14px 16px;margin-top:14px}
+.ready.show{display:flex}.ready .tick{width:34px;height:34px;border-radius:50%;background:var(--ok);color:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:800;flex:none}
+.ready p{margin:0;color:var(--muted);font-size:.88rem;word-break:break-all}
+.hint{color:var(--muted);font-size:.82rem;margin:12px 0 0}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.stat{text-align:center;padding:18px}.stat b{display:block;font-size:1.3rem;font-weight:800}.stat span{color:var(--muted);font-size:.82rem}
+.head{padding:64px 0 22px}h2{font-size:clamp(1.6rem,3.5vw,2.2rem);letter-spacing:-.8px;line-height:1.2;margin:0 0 8px;font-weight:800}
+.head p{color:var(--muted);max-width:640px;margin:0}
+.tabs{display:inline-flex;gap:4px;padding:4px;background:var(--bg);border:1px solid var(--border);border-radius:12px;margin-bottom:20px}
+.tab{border:0;background:none;font:inherit;font-weight:700;color:var(--muted);padding:9px 18px;border-radius:9px;cursor:pointer;min-height:40px}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.panel[hidden]{display:none}
+label.f{display:block;font-weight:600;font-size:.9rem;margin-bottom:6px}
+textarea,select{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+textarea{min-height:110px;resize:vertical;margin-bottom:12px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.notice{display:none;margin-top:14px;padding:12px 14px;border-radius:10px;font-size:.92rem}
+.notice.show{display:block}.notice.err{background:var(--bad-bg);border:1px solid var(--bad-b);color:var(--bad)}.notice.info{background:var(--tint);border:1px solid var(--tint-b)}
+.answer{margin-top:18px;background:var(--tint);border:1px solid var(--tint-b);border-radius:14px;padding:20px}
+.answer h4,.analysis h4{margin:16px 0 6px;font-size:1rem}.answer h4:first-child,.analysis h4:first-child{margin-top:0}
+.answer p,.analysis p{margin:0 0 8px}.answer ul,.analysis ul{margin:0 0 8px;padding-left:20px}
+details{margin-top:12px;color:var(--muted);font-size:.9rem}summary{cursor:pointer;font-weight:600}
+details pre{white-space:pre-wrap;font:inherit;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin:8px 0}
+.qn{color:var(--muted);font-size:.8rem;font-weight:700;margin:22px 0 4px}.qt{font-weight:800;font-size:1.08rem;margin:0 0 10px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;margin:7px 0;border:1px solid var(--border);background:var(--bg);border-radius:10px;cursor:pointer}
+.opt:has(input:checked){border-color:var(--primary);background:var(--tint)}.opt input{margin-top:5px;accent-color:var(--primary)}
+.score{text-align:center;padding:28px;border-radius:16px;background:var(--tint);border:1px solid var(--tint-b);margin-bottom:8px}
+.score b{display:block;font-size:3.2rem;font-weight:800;letter-spacing:-1.5px;line-height:1.1}.score span{color:var(--muted)}
+.rv{margin-top:12px;padding:14px 16px;border-radius:12px;border:1px solid}.rv.ok{background:var(--ok-bg);border-color:var(--ok-b)}.rv.no{background:var(--bad-bg);border-color:var(--bad-b)}
+.rv strong{display:block}.rv p{margin:4px 0 0;font-size:.9rem}.rv .ex{color:var(--muted)}
+.analysis{margin-top:12px;background:var(--warn-bg);border:1px solid var(--warn-b);border-radius:14px;padding:20px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.step{counter-increment:s}.step::before{content:counter(s);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--primary);color:var(--ink);font-weight:800;margin-bottom:14px}
+.step h3{margin:0 0 6px;font-size:1.05rem}.step p{margin:0;color:var(--muted);font-size:.93rem}
+footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:64px;padding:26px 0 36px;border-top:1px solid var(--border);color:var(--muted);font-size:.84rem}
+.spin{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:r .7s linear infinite}@keyframes r{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2s}html{scroll-behavior:auto}}
+@media (max-width:860px){.hero,.steps,.row{grid-template-columns:1fr}.hero{gap:32px}.stats{grid-template-columns:repeat(2,1fr)}.links a:not(.btn){display:none}}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+<nav>
+  <a class="logo" href="#"><i>🧠</i>FriendMind</a>
+  <div class="links">
+    <a href="#workspace">Study</a>
+    <a href="#how">How it works</a>
+    <a class="btn" href="#upload">Get started</a>
+  </div>
+</nav>
+
+<header class="hero" id="upload">
+  <div>
+    <span class="badge">Runs locally with open-source AI</span>
+    <h1>Turn your notes into quizzes. Find what you keep forgetting.</h1>
+    <p class="lead">Upload a study PDF. FriendMind answers questions from your notes, writes quizzes, and shows which concepts need another pass.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a class="btn" href="#workspace">Start studying</a>
+      <a class="btn ghost" href="#how">See how it works</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <label class="drop" id="drop" tabindex="0">
+      <input type="file" id="file" accept="application/pdf">
+      <b>Drop your study PDF here</b>
+      <span>or click to choose a file</span>
+    </label>
+
+    <div class="ready" id="ready">
+      <div class="tick">✓</div>
+      <div>
+        <strong>Study material ready</strong>
+        <p id="readyTxt"></p>
+      </div>
+    </div>
+
+    <div class="notice" id="upMsg"></div>
+
+    <p class="hint">PDF only. Text is indexed locally with ChromaDB.</p>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="card stat">
+    <b id="sMat">—</b>
+    <span>Study material</span>
+  </div>
+
+  <div class="card stat">
+    <b id="sChunks">—</b>
+    <span>Indexed chunks</span>
+  </div>
+
+  <div class="card stat">
+    <b id="sScore">—</b>
+    <span>Latest quiz score</span>
+  </div>
+
+  <div class="card stat">
+    <b>Gemma 3</b>
+    <span>AI engine</span>
+  </div>
+</div>
+
+<section id="workspace">
+
+  <div class="head">
+    <h2>Study with your own notes</h2>
+    <p>Ask questions or test yourself. Everything comes from the PDF you uploaded.</p>
+  </div>
+
+  <div class="card">
+
+    <div class="tabs" role="tablist">
+
+      <button
+        class="tab"
+        role="tab"
+        aria-selected="true"
+        data-p="askP">
+        Ask FriendMind
+      </button>
+
+      <button
+        class="tab"
+        role="tab"
+        aria-selected="false"
+        data-p="quizP">
+        Quiz
+      </button>
+
+    </div>
+
+
+    <div class="panel" id="askP">
+
+      <label class="f" for="q">
+        What would you like to learn?
+      </label>
+
+      <textarea
+        id="q"
+        placeholder="Example: Explain the concept of a full adder from my notes.">
+      </textarea>
+
+      <button class="btn block" id="askBtn">
+        Ask FriendMind
+      </button>
+
+      <div class="notice" id="askMsg"></div>
+
+      <div id="askOut"></div>
+
+    </div>
+
+
+    <div class="panel" id="quizP" hidden>
+
+      <div id="setup">
+
+        <div class="row">
+
+          <div>
+            <label class="f" for="num">
+              Number of questions
+            </label>
+
+            <select id="num">
+              <option>5</option>
+              <option>10</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="f" for="diff">
+              Difficulty
+            </label>
+
+            <select id="diff">
+              <option>Easy</option>
+              <option selected>Medium</option>
+              <option>Hard</option>
+            </select>
+          </div>
+
+        </div>
+
+        <button class="btn block" id="genBtn">
+          Generate quiz
+        </button>
+
+      </div>
+
+      <div class="notice" id="quizMsg"></div>
+
+      <div id="quizOut"></div>
+
+    </div>
+
+  </div>
+</section>
+
+
+<section id="how">
+
+  <div class="head">
+    <h2>From notes to active revision</h2>
+    <p>A simple learning loop built around the material you already have.</p>
+  </div>
+
+  <div class="steps">
+
+    <div class="card step">
+      <h3>Upload your material</h3>
+      <p>Add a study PDF. FriendMind extracts the text and indexes it for retrieval.</p>
+    </div>
+
+    <div class="card step">
+      <h3>Ask and test yourself</h3>
+      <p>Ask questions about your notes or generate an AI quiz at the difficulty you choose.</p>
+    </div>
+
+    <div class="card step">
+      <h3>Review weak spots</h3>
+      <p>Submit your answers and see which concepts to revise next.</p>
+    </div>
+
+  </div>
+
+</section>
+
+
+<footer>
+  <span>
+    <strong>FriendMind</strong> — your personal AI study companion
+  </span>
+
+  <span>
+    Gemma 3 4B · Ollama · ChromaDB · FastAPI
+  </span>
+</footer>
+
+</div>
+
+
+<script>
+
+const $=s=>document.querySelector(s);
+
+const S={
+  ready:false,
+  quiz:null
+};
+
+
+const esc=t=>String(t).replace(
+  /[&<>"']/g,
+  c=>({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  }[c])
+);
+
+
+/* =====================================================
+   FIX 1:
+   Safe Markdown renderer
+   Also handles weak-topic analysis objects.
+===================================================== */
+
+function md(t){
+
+  if(t===null || t===undefined){
+    return '';
+  }
+
+
+  /*
+    Weak-topic analysis is an object:
+
+    {
+      weak_topics: [...],
+      revision_advice: [...]
+    }
+
+    Convert it into readable HTML instead of
+    displaying [object Object].
+  */
+
+  if(typeof t==='object'){
+
+    let html='';
+
+
+    if(
+      Array.isArray(t.weak_topics) &&
+      t.weak_topics.length
+    ){
+
+      html+='<h4>Weak topics</h4>';
+
+      html+='<ul>';
+
+      t.weak_topics.forEach(topic=>{
+
+        html+=`<li>${esc(topic)}</li>`;
+
+      });
+
+      html+='</ul>';
+
+    }
+
+
+    if(
+      Array.isArray(t.revision_advice) &&
+      t.revision_advice.length
+    ){
+
+      html+='<h4>Recommended next steps</h4>';
+
+      html+='<ul>';
+
+      t.revision_advice.forEach(advice=>{
+
+        html+=`<li>${esc(advice)}</li>`;
+
+      });
+
+      html+='</ul>';
+
+    }
+
+
+    if(!html){
+
+      html='<p>No specific weak topics were identified.</p>';
+
+    }
+
+
+    return html;
+
+  }
+
+
+  const inl=s=>esc(s)
+    .replace(
+      /\*\*(.+?)\*\*/g,
+      '<strong>$1</strong>'
+    )
+    .replace(
+      /`(.+?)`/g,
+      '<code>$1</code>'
+    );
+
+
+  let out='';
+  let list=false;
+
+
+  for(const raw of String(t).split('\n')){
+
+    const l=raw.trim();
+
+    const b=l.match(/^[-*]\s+(.*)/);
+
+    const h=l.match(/^#{1,4}\s+(.*)/);
+
+
+    if(b){
+
+      if(!list){
+
+        out+='<ul>';
+
+        list=true;
+
+      }
+
+      out+='<li>'+inl(b[1])+'</li>';
+
+      continue;
+
+    }
+
+
+    if(list){
+
+      out+='</ul>';
+
+      list=false;
+
+    }
+
+
+    if(h){
+
+      out+='<h4>'+inl(h[1])+'</h4>';
+
+    }else if(l){
+
+      out+='<p>'+inl(l)+'</p>';
+
+    }
+
+  }
+
+
+  return out+(list?'</ul>':'');
+
+}
+
+
+function note(id,msg,type){
+
+  const n=$(id);
+
+  n.className=
+    'notice'+
+    (msg?' show '+(type||'err'):'');
+
+  n.textContent=msg||'';
+
+}
+
+
+async function api(path,body,form){
+
+  const r=await fetch(
+    path,
+    form
+      ? {
+          method:'POST',
+          body:form
+        }
+      : {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json'
+          },
+          body:JSON.stringify(body)
+        }
+  );
+
+
+  const d=await r.json().catch(()=>({}));
+
+
+  if(!r.ok){
+
+    throw new Error(
+      d.detail ||
+      d.error ||
+      'Something went wrong. Is the API running?'
+    );
+
+  }
+
+
+  return d;
+
+}
+
+
+async function busy(btn,label,fn){
+
+  const old=btn.innerHTML;
+
+  btn.disabled=true;
+
+  btn.innerHTML=
+    '<span class="spin"></span>'+
+    label;
+
+
+  try{
+
+    await fn();
+
+  }finally{
+
+    btn.disabled=false;
+
+    btn.innerHTML=old;
+
+  }
+
+}
+
+
+/* =====================================================
+   TABS
+===================================================== */
+
+document.querySelectorAll('.tab').forEach(t=>
+  t.addEventListener('click',()=>{
+
+    document
+      .querySelectorAll('.tab')
+      .forEach(x=>
+        x.setAttribute(
+          'aria-selected',
+          x===t
+        )
+      );
+
+
+    document
+      .querySelectorAll('.panel')
+      .forEach(p=>
+        p.hidden=
+          p.id!==t.dataset.p
+      );
+
+  })
+);
+
+
+/* =====================================================
+   UPLOAD
+===================================================== */
+
+const drop=$('#drop');
+
+const fileIn=$('#file');
+
+
+['dragover','dragenter'].forEach(e=>
+  drop.addEventListener(e,ev=>{
+
+    ev.preventDefault();
+
+    drop.classList.add('over');
+
+  })
+);
+
+
+['dragleave','drop'].forEach(e=>
+  drop.addEventListener(e,ev=>{
+
+    ev.preventDefault();
+
+    drop.classList.remove('over');
+
+  })
+);
+
+
+drop.addEventListener('drop',e=>{
+
+  if(e.dataTransfer.files[0]){
+
+    upload(
+      e.dataTransfer.files[0]
+    );
+
+  }
+
+});
+
+
+drop.addEventListener('keydown',e=>{
+
+  if(e.key==='Enter'||e.key===' '){
+
+    e.preventDefault();
+
+    fileIn.click();
+
+  }
+
+});
+
+
+fileIn.addEventListener('change',()=>{
+
+  if(fileIn.files[0]){
+
+    upload(
+      fileIn.files[0]
+    );
+
+  }
+
+});
+
+
+async function upload(f){
+
+  note(
+    '#upMsg',
+    'Reading and indexing your study material…',
+    'info'
+  );
+
+
+  $('#ready').classList.remove('show');
+
+
+  if(!/\.pdf$/i.test(f.name)){
+
+    return note(
+      '#upMsg',
+      'Please choose a PDF file.'
+    );
+
+  }
+
+
+  try{
+
+    const fd=new FormData();
+
+    fd.append('file',f);
+
+
+    const d=await api(
+      '/api/upload',
+      null,
+      fd
+    );
+
+
+    if(d.success===false){
+
+      throw new Error(
+        d.error ||
+        'Upload failed.'
+      );
+
+    }
+
+
+    S.ready=true;
+
+    note(
+      '#upMsg',
+      ''
+    );
+
+
+    $('#readyTxt').textContent=
+      `${d.filename} · ${d.pages} pages · ${d.chunks} chunks indexed`;
+
+
+    $('#ready').classList.add('show');
+
+    $('#sMat').textContent='Ready';
+
+    $('#sChunks').textContent=d.chunks;
+
+  }catch(e){
+
+    note(
+      '#upMsg',
+      e.message
+    );
+
+  }
+
+}
+
+
+const needFile=id=>{
+
+  if(S.ready){
+
+    return false;
+
+  }
+
+  note(
+    id,
+    'Upload your study PDF first.'
+  );
+
+  return true;
+
+};
+
+
+/* =====================================================
+   ASK FRIENDMIND
+===================================================== */
+
+$('#askBtn').addEventListener('click',e=>{
+
+  const q=$('#q').value.trim();
+
+  note(
+    '#askMsg',
+    ''
+  );
+
+
+  if(!q){
+
+    return note(
+      '#askMsg',
+      'Please enter a question first.'
+    );
+
+  }
+
+
+  if(needFile('#askMsg')){
+
+    return;
+
+  }
+
+
+  busy(
+    e.currentTarget,
+    'FriendMind is thinking…',
+    async()=>{
+
+      try{
+
+        const d=await api(
+          '/api/ask',
+          {
+            question:q
+          }
+        );
+
+
+        if(d.success===false){
+
+          throw new Error(
+            d.error ||
+            'Could not answer the question.'
+          );
+
+        }
+
+
+        /*
+          FIX 2:
+          Backend returns:
+
+          sources: [
+            { text: "..." }
+          ]
+
+          So use s.text instead of esc(s).
+        */
+
+        const sourceHtml=
+          Array.isArray(d.sources) &&
+          d.sources.length
+          ?
+
+          `
+            <details>
+
+              <summary>
+                Sources retrieved from your notes
+              </summary>
+
+              ${
+                d.sources.map((s,i)=>`
+
+                  <strong>
+                    Source chunk ${i+1}
+                  </strong>
+
+                  <pre>
+${esc(
+  typeof s==='object'
+    ? (s.text || '')
+    : s
+)}
+                  </pre>
+
+                `).join('')
+              }
+
+            </details>
+          `
+
+          : '';
+
+
+        $('#askOut').innerHTML=`
+
+          <div class="answer">
+            ${md(d.answer || '')}
+          </div>
+
+          ${sourceHtml}
+
+        `;
+
+      }catch(err){
+
+        note(
+          '#askMsg',
+          err.message
+        );
+
+      }
+
+    }
+  );
+
+});
+
+
+/* =====================================================
+   QUIZ
+===================================================== */
+
+$('#genBtn').addEventListener('click',e=>{
+
+  note(
+    '#quizMsg',
+    ''
+  );
+
+
+  if(needFile('#quizMsg')){
+
+    return;
+
+  }
+
+
+  busy(
+    e.currentTarget,
+    'Creating your quiz…',
+    async()=>{
+
+      try{
+
+        const q=await api(
+          '/api/quiz',
+          {
+            num_questions:
+              +$('#num').value,
+
+            difficulty:
+              $('#diff').value
+          }
+        );
+
+
+        if(q.success===false){
+
+          return note(
+            '#quizMsg',
+            q.error ||
+            'Quiz generation failed.'
+          );
+
+        }
+
+
+        if(
+          !q.questions ||
+          !q.questions.length
+        ){
+
+          return note(
+            '#quizMsg',
+            'No quiz questions were generated.'
+          );
+
+        }
+
+
+        S.quiz=q;
+
+        renderQuiz();
+
+      }catch(err){
+
+        note(
+          '#quizMsg',
+          err.message
+        );
+
+      }
+
+    }
+  );
+
+});
+
+
+function renderQuiz(){
+
+  const qs=S.quiz.questions;
+
+  $('#setup').hidden=true;
+
+
+  $('#quizOut').innerHTML=
+
+    qs.map((q,i)=>
+
+      `<div class="qn">
+        Question ${i+1} of ${qs.length}
+      </div>
+
+      <p class="qt">
+        ${esc(q.question)}
+      </p>`+
+
+      q.options.map((o,j)=>
+
+        `<label class="opt">
+
+          <input
+            type="radio"
+            name="q${i}"
+            value="${j}"
+          >
+
+          <span>
+            ${esc(o)}
+          </span>
+
+        </label>`
+
+      ).join('')
+
+    ).join('')+
+
+    `<button
+      class="btn block"
+      id="subBtn"
+      style="margin-top:22px"
+    >
+      Submit quiz
+    </button>`;
+
+
+  $('#subBtn').addEventListener(
+    'click',
+    submitQuiz
+  );
+
+}
+
+
+/* =====================================================
+   SUBMIT QUIZ
+===================================================== */
+
+async function submitQuiz(e){
+
+  const qs=S.quiz.questions;
+
+  const missed=[];
+
+  let score=0;
+
+
+  const picked=qs.map((q,i)=>{
+
+    const r=document.querySelector(
+      `input[name=q${i}]:checked`
+    );
+
+
+    return r
+      ? q.options[+r.value]
+      : null;
+
+  });
+
+
+  qs.forEach((q,i)=>{
+
+    if(picked[i]===q.answer){
+
+      score++;
+
+    }else{
+
+      missed.push({
+
+        question:
+          q.question,
+
+        correct_answer:
+          q.answer,
+
+        student_answer:
+          picked[i] ||
+          'No answer selected'
+
+      });
+
+    }
+
+  });
+
+
+  const pct=
+    Math.round(
+      score/qs.length*100
+    );
+
+
+  $('#sScore').textContent=
+    pct+'%';
+
+
+  $('#quizOut').innerHTML=
+
+    `<div class="score">
+
+      <b>${pct}%</b>
+
+      <span>
+        You answered ${score} of ${qs.length}
+        questions correctly.
+      </span>
+
+    </div>`+
+
+    qs.map((q,i)=>{
+
+      const ok=
+        picked[i]===q.answer;
+
+
+      /*
+        FIX 3:
+        Use md() for explanation instead of esc()
+        so **bold** is rendered correctly.
+      */
+
+      return `
+
+        <div class="rv ${ok?'ok':'no'}">
+
+          <strong>
+            Question ${i+1}:
+            ${ok?'Correct':'Incorrect'}
+          </strong>
+
+          <p>
+            ${esc(q.question)}
+          </p>
+
+          ${
+            ok
+              ? ''
+              :
+              `<p>
+                Your answer:
+                <strong>
+                  ${esc(
+                    picked[i] ||
+                    'No answer selected'
+                  )}
+                </strong>
+              </p>`
+          }
+
+          <p>
+            Correct answer:
+            <strong>
+              ${esc(q.answer)}
+            </strong>
+          </p>
+
+          <p class="ex">
+            ${md(
+              q.explanation ||
+              'No explanation available.'
+            )}
+          </p>
+
+        </div>
+
+      `;
+
+    }).join('')+
+
+    `<div id="weak"></div>
+
+     <button
+       class="btn ghost block"
+       id="again"
+       style="margin-top:18px"
+     >
+       Take another quiz
+     </button>`;
+
+
+  $('#again').addEventListener(
+    'click',
+    ()=>{
+
+      $('#quizOut').innerHTML='';
+
+      $('#setup').hidden=false;
+
+      S.quiz=null;
+
+    }
+  );
+
+
+  $('#quizOut').scrollIntoView({
+    behavior:'smooth',
+    block:'start'
+  });
+
+
+  const w=$('#weak');
+
+
+  /* ===================================================
+     ALL QUESTIONS CORRECT
+  =================================================== */
+
+  if(!missed.length){
+
+    w.innerHTML=`
+
+      <div class="rv ok">
+
+        <strong>
+          Excellent!
+        </strong>
+
+        <p>
+          You answered every question correctly.
+          Try a harder quiz to challenge yourself.
+        </p>
+
+      </div>
+
+    `;
+
+    return;
+
+  }
+
+
+  /* ===================================================
+     WEAK TOPIC ANALYSIS
+  =================================================== */
+
+  w.innerHTML=`
+
+    <div class="analysis">
+
+      <span
+        class="spin"
+        style="
+          display:inline-block;
+          vertical-align:middle;
+          margin-right:8px
+        "
+      ></span>
+
+      FriendMind is analyzing your mistakes…
+
+    </div>
+
+  `;
+
+
+  try{
+
+    const d=await api(
+      '/api/weak-topics',
+      {
+        incorrect:missed
+      }
+    );
+
+
+    if(d.success===false){
+
+      throw new Error(
+        d.error ||
+        'Weak-topic analysis failed.'
+      );
+
+    }
+
+
+    if(
+      !d.analysis ||
+      typeof d.analysis!=='object'
+    ){
+
+      throw new Error(
+        'No valid weak-topic analysis was returned.'
+      );
+
+    }
+
+
+    /*
+      FIX 4:
+      d.analysis is an object.
+
+      md() now safely converts:
+
+      {
+        weak_topics: [...],
+        revision_advice: [...]
+      }
+
+      into readable HTML.
+    */
+
+    w.innerHTML=`
+
+      <div class="analysis">
+
+        ${md(d.analysis)}
+
+      </div>
+
+    `;
+
+
+  }catch(err){
+
+    w.innerHTML=`
+
+      <div class="notice show err">
+
+        ${esc(err.message)}
+
+      </div>
+
+    `;
+
+  }
+
+}
+
+</script>
+</body>
+</html>

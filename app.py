@@ -1,740 +1,498 @@
-import streamlit as st
-import ollama
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pypdf import PdfReader
-
-from src.rag import add_document, search_documents
+import ollama
+import json
+import tempfile
+import os
+from src.rag import add_document, search_documents, get_indexed_documents
 from src.quiz import generate_quiz
 
 
-# -----------------------------------
-# Page configuration
-# -----------------------------------
+# ============================================================
+# FRIENDMIND API
+# ============================================================
 
-st.set_page_config(
-    page_title="FriendMind",
-    page_icon="🧠",
-    layout="centered",
+app = FastAPI(
+    title="FriendMind API",
+    description="AI-powered personal study companion",
+    version="1.0.0"
 )
 
 
-# -----------------------------------
-# Weak Topic Detection
-# -----------------------------------
+# ============================================================
+# CORS
+# ============================================================
 
-def detect_weak_topics(incorrect_questions):
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    if not incorrect_questions:
-        return "🎉 Great job! You did not get any questions wrong."
 
-    question_text = "\n\n".join(
-        [
-            f"Question: {item['question']}\n"
-            f"Correct Answer: {item['correct_answer']}\n"
-            f"Student Answer: {item['student_answer']}"
-            for item in incorrect_questions
-        ]
-    )
+# ============================================================
+# DOCUMENT STATE
+# ============================================================
+@app.post("/api/upload")
+async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".pdf"):
+        return {"success": False, "error": "Only PDF files are supported."}
 
-    prompt = f"""
-You are FriendMind, a personal AI study companion.
+    temp_path = None
 
-Analyze the questions the student answered incorrectly.
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            contents = await file.read()
+            temp_file.write(contents)
+            temp_path = temp_file.name
 
-Identify the concepts or topics that appear to be weak based ONLY
-on the questions and answers provided below.
+        text = extract_pdf_text(temp_path)
 
-Incorrect questions:
-----------------
-{question_text}
-----------------
-
-Give a concise response in this format:
-
-### ⚠️ Weak Topics
-
-- Topic 1 — brief reason
-- Topic 2 — brief reason
-
-### 📚 What to Revise
-
-Give 2-4 specific concepts the student should revise.
-
-### 🎯 Practice Recommendation
-
-Give one short recommendation for what the student should practice next.
-
-Do not invent topics that cannot reasonably be identified from
-the questions provided.
-"""
-
-    response = ollama.chat(
-        model="gemma3:4b",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
+        if not text.strip():
+            return {
+                "success": False,
+                "error": "Could not extract text from this PDF."
             }
-        ],
-    )
 
-    return response["message"]["content"]
+        chunk_count = add_document(
+            text,
+            document_name=file.filename
+        )
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "chunks": chunk_count,
+            "characters": len(text),
+            "message": "PDF uploaded and indexed successfully."
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
-# -----------------------------------
-# Gemma
-# -----------------------------------
 
-def ask_gemma(question, context):
+# ============================================================
+# SERVE INDEX.HTML
+# ============================================================
 
-    prompt = f"""
+@app.get("/")
+def serve_frontend():
+    return FileResponse("index.html")
+
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
+@app.get("/api/health")
+def health():
+    documents = get_indexed_documents()
+
+    return {
+        "status": "healthy",
+        "model": "gemma3:4b",
+        "documents": len(documents)
+    }
+
+
+# ============================================================
+# PDF TEXT EXTRACTION
+# ============================================================
+
+def extract_pdf_text(file_path):
+    reader = PdfReader(file_path)
+
+    pages = []
+
+    for page in reader.pages:
+        text = page.extract_text()
+
+        if text:
+            pages.append(text)
+
+    return "\n".join(pages)
+
+
+# ============================================================
+# UPLOAD PDF
+# ============================================================
+
+@app.post("/api/upload")
+async def upload_pdf(file: UploadFile = File(...)):
+
+    if not file.filename.lower().endswith(".pdf"):
+        return {
+            "success": False,
+            "error": "Only PDF files are supported."
+        }
+
+    temp_path = None
+
+    try:
+
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".pdf"
+        ) as temp_file:
+
+            contents = await file.read()
+            temp_file.write(contents)
+
+            temp_path = temp_file.name
+
+        # Extract PDF text
+        reader = PdfReader(temp_path)
+        pages = len(reader.pages)
+        text = extract_pdf_text(temp_path)
+
+        if not text.strip():
+            return {
+                "success": False,
+                "error": "Could not extract text from this PDF."
+            }
+
+        # Add document to ChromaDB
+        chunk_count = add_document(
+            text,
+            document_name=file.filename
+        )
+
+        uploaded_documents.append({
+            "name": file.filename,
+            "chunks": chunk_count
+        })
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "pages": pages,
+            "chunks": chunk_count,
+            "characters": len(text),
+            "message": "PDF uploaded and indexed successfully."
+        }
+
+    except Exception as e:
+
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+    finally:
+
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+# ============================================================
+# ASK QUESTION
+# ============================================================
+
+@app.post("/api/ask")
+async def ask_question(data: dict):
+
+    question = data.get("question", "").strip()
+
+    if not question:
+        return {
+            "success": False,
+            "error": "Question is required."
+        }
+
+    try:
+
+        results = search_documents(
+            question,
+            top_k=3
+        )
+
+        documents = results.get(
+            "documents",
+            [[]]
+        )[0]
+
+        if not documents:
+
+            return {
+                "success": False,
+                "error": "No relevant study material found."
+            }
+
+        context = "\n\n".join(documents)
+        context = context[:7000]
+
+        prompt = f"""
 You are FriendMind, a personal AI study companion.
 
-Answer the student's question using the study material provided below.
+Answer the student's question using ONLY the study material provided below.
 
-IMPORTANT RULES:
-1. Prefer information from the provided study material.
-2. Explain concepts clearly and simply.
-3. If the study material does not contain enough information,
-   say that the uploaded material does not provide enough information.
-4. Do not pretend that information came from the notes if it did not.
+Rules:
+1. Use only the provided study material.
+2. If the answer is not present, say that it is not available in the uploaded material.
+3. Give a clear and student-friendly explanation.
+4. Do not invent facts.
+5. Keep the answer concise but useful.
 
-STUDY MATERIAL:
+Study material:
 ----------------
 {context}
 ----------------
 
-STUDENT QUESTION:
+Student question:
 {question}
-
-Give a helpful, student-friendly answer.
 """
 
-    response = ollama.chat(
-        model="gemma3:4b",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
+        response = ollama.chat(
+            model="gemma3:4b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            options={
+                "temperature": 0.2,
+                "num_predict": 500
             }
-        ],
-    )
+        )
 
-    return response["message"]["content"]
+        answer = response["message"]["content"].strip()
 
-
-# -----------------------------------
-# Header
-# -----------------------------------
-
-st.title("🧠 FriendMind")
-
-st.subheader(
-    "Your Personal AI Study Companion"
-)
-
-st.write(
-    "Upload your study material and ask questions. "
-    "FriendMind retrieves relevant information from your notes "
-    "and uses Gemma to explain it."
-)
-
-st.divider()
-
-
-# -----------------------------------
-# Upload study material
-# -----------------------------------
-
-st.markdown("### 📚 Upload Study Material")
-
-uploaded_file = st.file_uploader(
-    "Upload your study notes or textbook PDF",
-    type=["pdf"],
-)
-
-
-# -----------------------------------
-# Process PDF
-# -----------------------------------
-
-if uploaded_file is not None:
-
-    try:
-
-        reader = PdfReader(uploaded_file)
-
-        page_count = len(reader.pages)
-
-        extracted_text = ""
-
-        for page in reader.pages:
-
-            text = page.extract_text()
-
-            if text:
-                extracted_text += text + "\n"
-
-        if extracted_text.strip():
-
-            st.success(
-                f"✅ PDF uploaded successfully — "
-                f"{page_count} page(s)"
-            )
-
-            st.info(
-                f"Extracted approximately "
-                f"{len(extracted_text):,} characters."
-            )
-
-            # -----------------------------------
-            # Add document to ChromaDB
-            # -----------------------------------
-
-            if (
-                "processed_file" not in st.session_state
-                or st.session_state["processed_file"]
-                != uploaded_file.name
-            ):
-
-                with st.spinner(
-                    "Processing your study material..."
-                ):
-
-                    chunk_count = add_document(
-                        extracted_text,
-                        uploaded_file.name,
-                    )
-
-                st.session_state["processed_file"] = (
-                    uploaded_file.name
-                )
-
-                st.session_state["chunk_count"] = (
-                    chunk_count
-                )
-
-            if "chunk_count" in st.session_state:
-
-                st.success(
-                    f"🧠 Study material ready! "
-                    f"{st.session_state['chunk_count']} "
-                    f"chunk(s) indexed."
-                )
-
-            # -----------------------------------
-            # Preview
-            # -----------------------------------
-
-            with st.expander(
-                "📄 Preview extracted text"
-            ):
-
-                st.text_area(
-                    "Extracted text",
-                    extracted_text[:3000],
-                    height=250,
-                    label_visibility="collapsed",
-                )
-
-        else:
-
-            st.warning(
-                "No readable text was found in this PDF. "
-                "It may contain scanned images."
-            )
+        return {
+            "success": True,
+            "question": question,
+            "answer": answer,
+            "sources": [
+                {
+                    "text": doc[:500]
+                }
+                for doc in documents
+            ]
+        }
 
     except Exception as e:
 
-        st.error(
-            "Could not process this PDF."
-        )
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-        st.code(str(e))
 
+# ============================================================
+# GENERATE QUIZ
+# ============================================================
 
-st.divider()
+# ============================================================
+# GENERATE QUIZ
+# ============================================================
 
+@app.post("/api/quiz")
+async def create_quiz(data: dict):
 
-# -----------------------------------
-# Ask FriendMind
-# -----------------------------------
-
-st.markdown("### 💬 Ask FriendMind")
-
-question = st.text_area(
-    "What would you like to learn?",
-    placeholder=(
-        "Example: Explain the concept of a full adder "
-        "from my notes."
-    ),
-    height=120,
-)
-
-
-# -----------------------------------
-# Ask button
-# -----------------------------------
-
-if st.button(
-    "🤖 Ask FriendMind",
-    use_container_width=True,
-):
-
-    if not question.strip():
-
-        st.warning(
-            "Please enter a question first."
-        )
-
-    elif "processed_file" not in st.session_state:
-
-        st.warning(
-            "Please upload your study material first."
-        )
-
-    else:
-
-        with st.spinner(
-            "Searching your study material..."
-        ):
-
-            try:
-
-                results = search_documents(
-                    question,
-                    top_k=3,
-                )
-
-                documents = results.get(
-                    "documents",
-                    [[]],
-                )[0]
-
-                if not documents:
-
-                    st.warning(
-                        "I couldn't find relevant information "
-                        "in your uploaded material."
-                    )
-
-                else:
-
-                    context = "\n\n".join(
-                        documents
-                    )
-
-                    with st.spinner(
-                        "FriendMind is thinking..."
-                    ):
-
-                        answer = ask_gemma(
-                            question,
-                            context,
-                        )
-
-                    st.markdown(
-                        "### 📚 FriendMind's Answer"
-                    )
-
-                    st.markdown(answer)
-
-                    # -----------------------------------
-                    # Retrieved sources
-                    # -----------------------------------
-
-                    with st.expander(
-                        "🔎 Sources retrieved from your notes"
-                    ):
-
-                        for index, document in enumerate(
-                            documents,
-                            start=1,
-                        ):
-
-                            st.markdown(
-                                f"**Source chunk {index}**"
-                            )
-
-                            st.write(document)
-
-            except Exception as e:
-
-                st.error(
-                    "Something went wrong while "
-                    "searching the study material."
-                )
-
-                st.code(str(e))
-
-
-# -----------------------------------
-# Quiz Generator
-# -----------------------------------
-
-st.divider()
-
-st.header("📝 Quiz Generator")
-
-st.write(
-    "Test your understanding using questions generated "
-    "from your uploaded study material."
-)
-
-
-# -----------------------------------
-# Quiz session state
-# -----------------------------------
-
-if "quiz" not in st.session_state:
-    st.session_state.quiz = None
-
-if "quiz_answers" not in st.session_state:
-    st.session_state.quiz_answers = {}
-
-if "quiz_score" not in st.session_state:
-    st.session_state.quiz_score = None
-
-if "quiz_percentage" not in st.session_state:
-    st.session_state.quiz_percentage = None
-
-if "incorrect_questions" not in st.session_state:
-    st.session_state.incorrect_questions = []
-
-
-# -----------------------------------
-# Quiz settings
-# -----------------------------------
-
-if st.session_state.get("processed_file"):
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        num_questions = st.selectbox(
-            "Number of questions",
-            [5, 10],
-            index=0,
-        )
-
-    with col2:
-
-        difficulty = st.selectbox(
-            "Difficulty",
-            ["Easy", "Medium", "Hard"],
-            index=1,
-        )
-
-    # -----------------------------------
-    # Generate Quiz
-    # -----------------------------------
-
-    if st.button(
-        "🧠 Generate Quiz",
-        use_container_width=True,
-    ):
-
-        with st.spinner(
-            "FriendMind is creating your quiz..."
-        ):
-
-            try:
-
-                # Retrieve fewer chunks for faster generation
-                results = search_documents(
-                    "important concepts definitions key topics",
-                    top_k=3,
-                )
-
-                documents = results.get(
-                    "documents",
-                    [[]],
-                )[0]
-
-                if not documents:
-
-                    st.error(
-                        "No relevant study material was found "
-                        "for quiz generation."
-                    )
-
-                else:
-
-                    context = "\n\n".join(
-                        documents
-                    )
-
-                    quiz = generate_quiz(
-                        context=context,
-                        num_questions=num_questions,
-                        difficulty=difficulty,
-                    )
-
-                    st.session_state.quiz = quiz
-                    st.session_state.quiz_answers = {}
-
-                    # Clear previous results
-                    st.session_state.quiz_score = None
-                    st.session_state.quiz_percentage = None
-                    st.session_state.incorrect_questions = []
-
-            except Exception as e:
-
-                st.error(
-                    "Could not generate the quiz."
-                )
-
-                st.code(str(e))
-
-else:
-
-    st.info(
-        "📚 Upload and process a study PDF first."
+    num_questions = data.get(
+        "num_questions",
+        5
     )
 
+    difficulty = data.get(
+        "difficulty",
+        "Medium"
+    )
 
-# -----------------------------------
-# Display Quiz
-# -----------------------------------
+    try:
 
-if st.session_state.quiz:
-
-    quiz = st.session_state.quiz
-
-    if "error" in quiz:
-
-        st.error(
-            quiz["error"]
+        results = search_documents(
+            "important concepts definitions examples questions",
+            top_k=3
         )
 
-        # Show raw response only when debugging is needed
-        if "raw_response" in quiz:
+        documents = results.get(
+            "documents",
+            [[]]
+        )[0]
 
-            with st.expander(
-                "🔎 View Gemma response"
-            ):
+        if not documents:
 
-                st.code(
-                    quiz["raw_response"]
-                )
+            return {
+                "success": False,
+                "error": "Please upload study material first."
+            }
 
-    else:
+        context = "\n\n".join(documents)
 
-        questions = quiz.get(
-            "questions",
-            []
+        quiz = generate_quiz(
+            context=context,
+            num_questions=int(num_questions),
+            difficulty=difficulty
         )
 
-        if questions:
+        if "error" in quiz:
 
-            st.subheader("📖 Your Quiz")
+            return {
+                "success": False,
+                "error": quiz["error"]
+            }
 
-            # -----------------------------------
-            # Display questions
-            # -----------------------------------
+        return {
+            "success": True,
+            "questions": quiz["questions"],
+            "quiz": quiz
+        }
 
-            for i, quiz_question in enumerate(
-                questions
-            ):
+    except Exception as e:
 
-                st.markdown(
-                    f"### Question {i + 1}"
-                )
-
-                st.write(
-                    quiz_question["question"]
-                )
-
-                answer = st.radio(
-                    "Choose your answer:",
-                    quiz_question["options"],
-                    key=f"quiz_question_{i}",
-                )
-
-                st.session_state.quiz_answers[i] = answer
-
-                st.divider()
-
-            # -----------------------------------
-            # Submit Quiz
-            # -----------------------------------
-
-            if st.button(
-                "✅ Submit Quiz",
-                use_container_width=True,
-            ):
-
-                score = 0
-
-                incorrect_questions = []
-
-                # -----------------------------------
-                # Calculate score
-                # -----------------------------------
-
-                for i, quiz_question in enumerate(
-                    questions
-                ):
-
-                    selected_answer = (
-                        st.session_state.quiz_answers.get(i)
-                    )
-
-                    # IMPORTANT:
-                    # answer is now the actual answer text,
-                    # not an integer index.
-                    correct_answer = quiz_question["answer"]
-
-                    if selected_answer == correct_answer:
-
-                        score += 1
-
-                    else:
-
-                        incorrect_questions.append(
-                            {
-                                "question": quiz_question["question"],
-                                "correct_answer": correct_answer,
-                                "student_answer": (
-                                    selected_answer
-                                    if selected_answer
-                                    else "No answer selected"
-                                ),
-                            }
-                        )
-
-                # -----------------------------------
-                # Calculate percentage
-                # -----------------------------------
-
-                percentage = (
-                    int(
-                        (score / len(questions)) * 100
-                    )
-                    if questions
-                    else 0
-                )
-
-                # -----------------------------------
-                # Save result
-                # -----------------------------------
-
-                st.session_state.quiz_score = score
-
-                st.session_state.quiz_percentage = (
-                    percentage
-                )
-
-                st.session_state.incorrect_questions = (
-                    incorrect_questions
-                )
-
-                # -----------------------------------
-                # Show Score
-                # -----------------------------------
-
-                st.success(
-                    f"🎉 You scored {score}/{len(questions)} "
-                    f"({percentage}%)"
-                )
-
-                # -----------------------------------
-                # Answer Review
-                # -----------------------------------
-
-                st.subheader(
-                    "📚 Answer Review"
-                )
-
-                for i, quiz_question in enumerate(
-                    questions
-                ):
-
-                    selected_answer = (
-                        st.session_state.quiz_answers.get(i)
-                    )
-
-                    # IMPORTANT:
-                    # answer is actual text
-                    correct_answer = quiz_question["answer"]
-
-                    if selected_answer == correct_answer:
-
-                        st.success(
-                            f"Question {i + 1}: Correct ✅"
-                        )
-
-                    else:
-
-                        st.error(
-                            f"Question {i + 1}: Incorrect ❌"
-                        )
-
-                        st.write(
-                            f"Your answer: "
-                            f"**{selected_answer if selected_answer else 'No answer selected'}**"
-                        )
-
-                        st.write(
-                            f"Correct answer: "
-                            f"**{correct_answer}**"
-                        )
-
-                    st.caption(
-                        f"Explanation: "
-                        f"{quiz_question.get('explanation', 'No explanation available.')}"
-                    )
-
-                # -----------------------------------
-                # Weak Topic Detection
-                # -----------------------------------
-
-                st.divider()
-
-                st.subheader(
-                    "🎯 FriendMind's Learning Analysis"
-                )
-
-                if incorrect_questions:
-
-                    with st.spinner(
-                        "🧠 FriendMind is analyzing "
-                        "your mistakes..."
-                    ):
-
-                        weak_topics = detect_weak_topics(
-                            incorrect_questions
-                        )
-
-                    st.markdown(
-                        weak_topics
-                    )
-
-                else:
-
-                    st.success(
-                        "🌟 Excellent! You answered "
-                        "every question correctly."
-                    )
-
-                    st.info(
-                        "You can try a harder quiz "
-                        "to challenge yourself."
-                    )
-
-        else:
-
-            st.warning(
-                "No quiz questions were generated."
-            )
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
-# -----------------------------------
-# Footer
-# -----------------------------------
+# ============================================================
+# WEAK TOPIC DETECTION
+# ============================================================
 
-st.divider()
+@app.post("/api/weak-topics")
+async def weak_topics(data: dict):
+    # Accept the format currently sent by index.html
+    results = data.get("incorrect", data.get("results", []))
 
-st.caption(
-    "Powered by Gemma 3 4B • Ollama • ChromaDB • Streamlit"
-)
+    if not results:
+        return {
+            "success": True,
+            "analysis": {
+                "weak_topics": [],
+                "revision_advice": [
+                    "You answered all questions correctly. Keep practicing to retain the concepts."
+                ]
+            }
+        }
+
+    try:
+        result_text = json.dumps(results, indent=2)
+
+        prompt = f"""
+You are an AI study coach.
+
+Analyze the student's incorrect quiz answers below.
+
+Your task:
+1. Identify the specific concepts/topics the student struggled with.
+2. Identify what concept needs revision based ONLY on the quiz questions and answers.
+3. Give short, practical revision advice.
+
+IMPORTANT RULES:
+- Use ONLY the information contained in the quiz results.
+- Do not invent topics that are not supported by the questions.
+- Keep the response concise.
+- Return ONLY valid JSON.
+- Do not use markdown.
+- Do not use code fences.
+
+Quiz results:
+----------------
+{result_text}
+----------------
+
+Return exactly this JSON structure:
+
+{{
+    "weak_topics": [
+        "Topic 1",
+        "Topic 2"
+    ],
+    "revision_advice": [
+        "Advice 1",
+        "Advice 2"
+    ]
+}}
+"""
+
+        response = ollama.chat(
+            model="gemma3:4b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            options={
+                "temperature": 0.1,
+                "num_predict": 500
+            }
+        )
+
+        content = response["message"]["content"].strip()
+
+        # Remove accidental markdown fences
+        content = content.replace("```json", "")
+        content = content.replace("```", "")
+        content = content.strip()
+
+        analysis = json.loads(content)
+
+        # Make sure the expected structure exists
+        if not isinstance(analysis, dict):
+            raise ValueError("Invalid analysis format returned by Gemma.")
+
+        if "weak_topics" not in analysis:
+            analysis["weak_topics"] = []
+
+        if "revision_advice" not in analysis:
+            analysis["revision_advice"] = []
+
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "Gemma returned invalid JSON for weak-topic analysis."
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Weak-topic analysis failed: {str(e)}"
+        }
+
+# ============================================================
+# DOCUMENT STATUS
+# ============================================================
+
+@app.get("/api/documents")
+def get_documents():
+    documents = get_indexed_documents()
+
+    return {
+        "success": True,
+        "documents": documents
+    }
+
+
+# ============================================================
+# RUN SERVER
+# ============================================================
+
+if __name__ == "__main__":
+
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=8000
+    )
