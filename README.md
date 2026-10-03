@@ -4,7 +4,10 @@
 
 Built for the **Hacktoberfest 2026 DEV Weekend Challenge — “Build for a Friend.”**
 
-![FriendMind home](docs/screenshots/home.png)
+
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="FriendMind home screen" width="850">
+</p>
 
 ## 💡 What is FriendMind?
 
