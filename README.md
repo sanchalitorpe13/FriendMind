@@ -4,11 +4,6 @@
 
 Built for the **Hacktoberfest 2026 DEV Weekend Challenge — “Build for a Friend.”**
 
-
-<p align="center">
-  <img src="docs/screenshots/home.png" alt="FriendMind home screen" width="1250">
-</p>
-
 ## 💡 What is FriendMind?
 
 FriendMind turns your study PDFs into an interactive learning assistant.
