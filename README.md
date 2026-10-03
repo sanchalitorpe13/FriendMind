@@ -4,6 +4,8 @@
 
 Built for the **Hacktoberfest 2026 DEV Weekend Challenge — “Build for a Friend.”**
 
+![FriendMind home](docs/home.png)
+
 ## 💡 What is FriendMind?
 
 FriendMind turns your study PDFs into an interactive learning assistant.
@@ -44,6 +46,18 @@ Unlike a generic chatbot, FriendMind grounds its answers and quizzes in the user
 - ♻️ **Duplicate Upload Protection**
 - 🌙 **Responsive Light/Dark UI**
 - 🔒 **Local-first Architecture**
+
+---
+
+## 📸 Demo
+
+| 1. Upload your notes | 2. Ask a question |
+|---|---|
+| ![Upload](docs/upload.png) | ![Ask](docs/ask.png) |
+
+| 3. Take a quiz | 4. Find weak topics |
+|---|---|
+| ![Quiz](docs/quiz.png) | ![Results](docs/results.png) |
 
 ---
 
@@ -122,6 +136,7 @@ FriendMind/
 ├── requirements.txt
 ├── README.md
 ├── .gitignore
+├── docs/          # README screenshots
 └── src/
     ├── rag.py
     └── quiz.py
@@ -171,7 +186,7 @@ Open:
 
 **http://127.0.0.1:8000**
 
-> Open the application through FastAPI rather than directly opening `index.html`.
+> Open the application through FastAPI rather than directly opening `index.html`. Using VS Code Live Server (port 5500) causes "Failed to fetch".
 
 ---
 
