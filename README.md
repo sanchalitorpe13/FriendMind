@@ -6,7 +6,7 @@ Built for the **Hacktoberfest 2026 DEV Weekend Challenge — “Build for a Frie
 
 
 <p align="center">
-  <img src="docs/screenshots/home.png" alt="FriendMind home screen" width="850">
+  <img src="docs/screenshots/home.png" alt="FriendMind home screen" width="1250">
 </p>
 
 ## 💡 What is FriendMind?
