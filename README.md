@@ -4,7 +4,7 @@
 
 Built for the **Hacktoberfest 2026 DEV Weekend Challenge — “Build for a Friend.”**
 
-![FriendMind home](docs/home.png)
+![FriendMind home](docs/screenshots/home.png)
 
 ## 💡 What is FriendMind?
 
@@ -53,11 +53,11 @@ Unlike a generic chatbot, FriendMind grounds its answers and quizzes in the user
 
 | 1. Upload your notes | 2. Ask a question |
 |---|---|
-| ![Upload](docs/upload.png) | ![Ask](docs/ask.png) |
+| ![Upload](docs/screenshots/upload.png) | ![Ask](docs/screenshots/ask.png) |
 
 | 3. Take a quiz | 4. Find weak topics |
 |---|---|
-| ![Quiz](docs/quiz.png) | ![Results](docs/results.png) |
+| ![Quiz](docs/screenshots/quiz.png) | ![Results](docs/screenshots/results.png) |
 
 ---
 
